@@ -1,4 +1,7 @@
-def train_test_from_null(df, target):
+import pandas as pd
+
+
+def train_test_from_null(df: pd.DataFrame, target: str) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     train_data = df.dropna(subset=target)
     test_data = df[~df.index.isin(train_data.index)]
