@@ -18,6 +18,18 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
     return raw_train_data, raw_test_data
 
 
+def load_clean_data() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Load pre-imputed train and test datasets
+    :return: clean train and test datasets
+    """
+
+    clean_comb_data = pd.read_csv(DATA_PATH / "titanic" / "all_data_clean.csv", index_col=0)
+    clean_train_data, clean_test_data = train_test_from_null(clean_comb_data, "Survived")
+
+    return clean_train_data, clean_test_data
+
+
 def get_title(df: pd.DataFrame) -> pd.DataFrame:
     """
     Function to extract title from name
@@ -47,6 +59,10 @@ def get_title(df: pd.DataFrame) -> pd.DataFrame:
     out = pd.get_dummies(df["Title"], drop_first=True)
 
     return out
+
+
+def clean_dataset_pandas(df):
+    pass
 
 
 def prepare_dataset_pandas(dfs: list[pd.DataFrame], scale=True, drop=None, target=None) -> list[pd.DataFrame]:
@@ -80,7 +96,10 @@ def prepare_dataset_pandas(dfs: list[pd.DataFrame], scale=True, drop=None, targe
 
         if scale:
             # TODO: This should be predefined but get_dummies creates additional labels, find workaround
-            scale_columns = [c for c in df.columns if target is not None and c not in target]
+            if target is None:
+                scale_columns = df.columns
+            else:
+                scale_columns = [c for c in df.columns if c not in target]
 
             if i == 0:
                 scaled_data = scaler.fit_transform(df[scale_columns])
@@ -94,9 +113,23 @@ def prepare_dataset_pandas(dfs: list[pd.DataFrame], scale=True, drop=None, targe
     return out_df
 
 
+def main():
+    target = "Survived"
+    drop_columns = ["PassengerId", "Cabin", "Ticket", "Name", "Sex"]
+    clean_csv_path = DATA_PATH / "titanic" / "all_data_clean.csv"
+
+    clean_data = pd.read_csv(clean_csv_path, index_col=0)
+    clean_train_data, clean_test_data = train_test_from_null(clean_data, target)
+
+    data = prepare_dataset_pandas(
+        [clean_train_data, clean_test_data],
+        drop=drop_columns,
+        target=target
+    )
+
+    print(data[0])
+
+
 if __name__ == "__main__":
 
-    clean_comb_data = pd.read_csv(DATA_PATH / "titanic" / "all_data_clean.csv", index_col=0)
-
-    clean_train_data, clean_test_data = train_test_from_null(clean_comb_data, "Survived")
-    train_data = prepare_dataset_pandas(clean_train_data)
+    main()
