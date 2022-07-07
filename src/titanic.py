@@ -1,7 +1,11 @@
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline, make_pipeline
+from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, FunctionTransformer, StandardScaler
 from src.kaggle_api import get_dataset
-from src.gen import train_test_from_null
+from src.gen import train_test_from_null, get_xy_from_dataframe
 from src.settings import DATA_PATH
 
 
@@ -111,6 +115,51 @@ def prepare_dataset_pandas(dfs: list[pd.DataFrame], scale=True, drop=None, targe
         out_df.append(df)
 
     return out_df
+
+
+def clean_pipeline_example():
+    """
+    Example of a preprocessing > classification pipeline
+    :return:
+    """
+    embarked_transformer = make_pipeline(SimpleImputer(strategy="most_frequent"), OneHotEncoder())
+    clip_sibsp = FunctionTransformer(lambda x, kwargs: x.clip(**kwargs), kw_args={"kwargs": {"upper": 3}})
+    clip_parch = FunctionTransformer(lambda x, kwargs: x.clip(**kwargs), kw_args={"kwargs": {"upper": 2}})
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("fare", SimpleImputer(strategy="mean"), ["Fare"]),
+            ("Embarked", embarked_transformer, ["Embarked"]),
+            ("pclass_age", OrdinalEncoder(), ["Pclass", "Age"]),
+            ("sibsp", clip_sibsp, ["SibSp"]),
+            ("parch", clip_parch, ["Parch"]),
+            ("title", OneHotEncoder(), ["Title"]),
+            # ("cat",         categorical_transformer, categorical_features)
+            # ("cat",         categorical_transformer, selector(dtype_include="category")),
+            # ("num",         numeric_transformer, selector(dtype_exclude="category")),
+        ]
+    )
+
+    pipe = Pipeline(steps=[
+        ("preprocess", preprocessor),
+        ("classifier", GradientBoostingClassifier(loss="log_loss", criterion="friedman_mse", n_estimators=50))]
+    )
+
+    return pipe
+
+
+def run_clean_pipeline_example():
+    # TODO: Convert to test
+    target = "Survived"
+
+    train_data, test_data = load_clean_data()
+    _, y_train = get_xy_from_dataframe(train_data, target)
+
+    p = clean_pipeline_example()
+
+    p.fit(train_data, y_train)
+    test_data[target] = p.predict(test_data)
+    print(test_data)
 
 
 def main():
