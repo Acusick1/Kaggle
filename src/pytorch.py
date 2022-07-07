@@ -33,50 +33,13 @@ class Net(nn.Module):
         return x
 
 
-def train_cifar(config, train_data, num_workers=0, checkpoint_dir=None):
+def train(net, optimizer, criterion, train_loader, val_loader, max_num_epochs=10, device=DEVICE, tuning=False):
 
-    net = Net(config["l1"], config["l2"])
-
-    # Have to define device from within since running via scheduler
-    if torch.cuda.is_available():
-        device = "cuda:0"
-        if torch.cuda.device_count() > 1:
-            net = nn.DataParallel(net)
-    else:
-        device = "cpu"
-
-    net.to(device)
-
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(net.parameters(), lr=config["lr"], momentum=0.9)
-
-    if checkpoint_dir:
-        model_state, optimizer_state = torch.load(os.path.join(checkpoint_dir, "checkpoint"))
-        net.load_state_dict(model_state)
-        optimizer.load_state_dict(optimizer_state)
-
-    test_abs = int(len(train_data) * 0.8)
-    train_subset, val_subset = random_split(
-        train_data, [test_abs, len(train_data) - test_abs])
-
-    trainloader = DataLoader(
-        train_subset,
-        batch_size=int(config["batch_size"]),
-        shuffle=True,
-        num_workers=num_workers
-    )
-    valloader = DataLoader(
-        val_subset,
-        batch_size=int(config["batch_size"]),
-        shuffle=True,
-        num_workers=num_workers
-    )
-
-    for epoch in range(10):  # loop over the dataset multiple times
+    for epoch in range(max_num_epochs):  # loop over the dataset multiple times
         running_loss = 0.0
         epoch_steps = 0
         #  for i, data in enumerate(train_subset):
-        for i, data in enumerate(trainloader, 0):
+        for i, data in enumerate(train_loader, 0):
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data
             inputs, labels = inputs.to(device), labels.to(device)
@@ -103,7 +66,7 @@ def train_cifar(config, train_data, num_workers=0, checkpoint_dir=None):
         val_steps = 0
         total = 0
         correct = 0
-        for i, data in enumerate(valloader, 0):
+        for i, data in enumerate(val_loader, 0):
             with torch.no_grad():
                 inputs, labels = data
                 inputs, labels = inputs.to(device), labels.to(device)
@@ -117,11 +80,69 @@ def train_cifar(config, train_data, num_workers=0, checkpoint_dir=None):
                 val_loss += loss.cpu().numpy()
                 val_steps += 1
 
-        with tune.checkpoint_dir(epoch) as checkpoint_dir:
-            path = os.path.join(checkpoint_dir, "checkpoint")
-            torch.save((net.state_dict(), optimizer.state_dict()), path)
+        if tuning:
+            with tune.checkpoint_dir(epoch) as checkpoint_dir:
+                path = os.path.join(checkpoint_dir, "checkpoint")
+                torch.save((net.state_dict(), optimizer.state_dict()), path)
 
-        tune.report(loss=(val_loss / val_steps), accuracy=correct / total)
+            tune.report(loss=(val_loss / val_steps), accuracy=correct / total)
+
+
+def get_train_val_loaders(train_data, split=0.8, batch_size=32, num_workers=0):
+
+    test_abs = int(len(train_data) * split)
+    train_subset, val_subset = random_split(
+        train_data, [test_abs, len(train_data) - test_abs])
+
+    train_loader = DataLoader(
+        train_subset,
+        batch_size=int(batch_size),
+        shuffle=True,
+        num_workers=num_workers
+    )
+
+    val_loader = DataLoader(
+        val_subset,
+        batch_size=int(batch_size),
+        shuffle=True,
+        num_workers=num_workers
+    )
+
+    return train_loader, val_loader
+
+
+def train_cifar(config, train_data, num_workers=0, max_num_epochs=10, checkpoint_dir=None):
+
+    net = Net(config["l1"], config["l2"])
+
+    # Have to define device from within since running via scheduler
+    if torch.cuda.is_available():
+        device = "cuda:0"
+        if torch.cuda.device_count() > 1:
+            net = nn.DataParallel(net)
+    else:
+        device = "cpu"
+
+    net.to(device)
+
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.SGD(net.parameters(), lr=config["lr"], momentum=0.9)
+
+    if checkpoint_dir:
+        model_state, optimizer_state = torch.load(os.path.join(checkpoint_dir, "checkpoint"))
+        net.load_state_dict(model_state)
+        optimizer.load_state_dict(optimizer_state)
+
+    train_loader, val_loader = get_train_val_loaders(
+        train_data,
+        batch_size=config["batch_size"],
+        num_workers=num_workers
+    )
+
+    train(net, optimizer, criterion, train_loader, val_loader,
+          max_num_epochs=max_num_epochs,
+          device=device,
+          tuning=True)
 
     print("Finished Training")
 
@@ -135,9 +156,9 @@ def dummy_config_test():
     train_data = prepare_dataset_pandas([train_data], drop=drop_columns)[0]
 
     train_target = torch.tensor(train_data[target].values).type(torch.LongTensor)
-    train = torch.tensor(train_data.drop(target, axis=1).values.astype(np.float32))
+    train_features = torch.tensor(train_data.drop(target, axis=1).values.astype(np.float32))
 
-    dataset = TensorDataset(train, train_target)
+    dataset = TensorDataset(train_features, train_target)
 
     config = {
         "l1": 128,
@@ -158,10 +179,10 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=0):
     train_data, test_data = prepare_dataset_pandas([raw_train_data, raw_test_data], drop=drop_columns)
 
     train_target = torch.tensor(train_data[target].values).type(torch.LongTensor)
-    train = torch.tensor(train_data.drop(target, axis=1).values.astype(np.float32))
-    test = torch.tensor(test_data.drop(target, axis=1).values.astype(np.float32))
+    train_features = torch.tensor(train_data.drop(target, axis=1).values.astype(np.float32))
+    test_features = torch.tensor(test_data.drop(target, axis=1).values.astype(np.float32))
 
-    dataset = TensorDataset(train, train_target)
+    dataset = TensorDataset(train_features, train_target)
 
     config = {
         "l1": tune.sample_from(lambda _: 2 ** np.random.randint(2, 9)),
@@ -180,7 +201,7 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=0):
         # parameter_columns=["l1", "l2", "lr", "batch_size"],
         metric_columns=["loss", "accuracy", "training_iteration"])
     result = tune.run(
-        partial(train_cifar, train_data=dataset),  # , data_dir=data_dir),
+        partial(train_cifar, train_data=dataset, max_num_epochs=max_num_epochs),  # , data_dir=data_dir),
         resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
         config=config,
         num_samples=num_samples,
@@ -200,7 +221,7 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=0):
         best_trained_model = nn.DataParallel(best_trained_model)
 
     best_trained_model.to(DEVICE)
-    test = test.to(DEVICE)
+    test = test_features.to(DEVICE)
 
     best_checkpoint_dir = best_trial.checkpoint.value
     model_state, optimizer_state = torch.load(os.path.join(
@@ -218,4 +239,4 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=0):
 if __name__ == "__main__":
 
     # dummy_config_test()
-    main(num_samples=5000, max_num_epochs=100)
+    main(num_samples=100, max_num_epochs=100)
