@@ -1,50 +1,15 @@
 import os
 import torch
 import numpy as np
-import pandas as pd
 from torch import optim
 from torch import nn
-from torch.utils.data import Dataset, DataLoader, TensorDataset, random_split
+from torch.utils.data import DataLoader, TensorDataset, random_split
 from ray import tune
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler
 from functools import partial
 from src.titanic import prepare_dataset_pandas, load_clean_data
 from src.settings import DATA_PATH, DEVICE
-
-
-class TitanicDataset(Dataset):
-
-    def __init__(self, csv_file, target="Survived", transform=None):
-
-        raw_data = pd.read_csv(csv_file, index_col=0).dropna(subset=target)
-        self.data = transform([raw_data])[0]
-        self.target = target
-
-    def __len__(self):
-        return self.data.shape[0]
-
-    def __getitem__(self, idx):
-
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
-
-        out = [
-            self.data.iloc[idx, self.data.columns != self.target],
-            self.data.loc[idx, [self.target]]
-        ]
-
-        # TODO: Type specification required?
-        out[0] = torch.tensor(out[0].values.astype(np.float32))
-        out[1] = torch.tensor(out[1].values).type(torch.LongTensor)
-
-        return out
-
-
-class TitanicTransform(object):
-
-    def __call__(self, sample):
-        pass
 
 
 class Net(nn.Module):
