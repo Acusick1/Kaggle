@@ -35,6 +35,8 @@ class Net(nn.Module):
 
 def train(net, optimizer, criterion, train_loader, val_loader, max_num_epochs=10, device=DEVICE, tuning=False):
 
+    print_every = min(len(train_loader), 1000) - 1
+
     for epoch in range(max_num_epochs):  # loop over the dataset multiple times
         running_loss = 0.0
         epoch_steps = 0
@@ -56,7 +58,7 @@ def train(net, optimizer, criterion, train_loader, val_loader, max_num_epochs=10
             # print statistics
             running_loss += loss.item()
             epoch_steps += 1
-            if i % 2000 == 1999:  # print every 2000 mini-batches
+            if not tuning and i > 0 and i % print_every == 0:
                 print("[%d, %5d] loss: %.3f" % (epoch + 1, i + 1,
                                                 running_loss / epoch_steps))
                 running_loss = 0.0
@@ -147,7 +149,7 @@ def train_cifar(config, train_data, num_workers=0, max_num_epochs=10, checkpoint
     print("Finished Training")
 
 
-def dummy_config_test():
+def run_single_config():
 
     target = "Survived"
     drop_columns = ["PassengerId", "Cabin", "Ticket", "Name", "Sex"]
@@ -164,10 +166,18 @@ def dummy_config_test():
         "l1": 128,
         "l2": 64,
         "lr": 0.1,
-        "batch_size": 16
+        "batch_size": 16,
+        "momentum": 0.9
     }
 
-    train_cifar(config, dataset)
+    net = Net(config["l1"], config["l2"])
+    net.to(DEVICE)
+    optimizer = optim.SGD(net.parameters(), lr=config["lr"], momentum=config["momentum"])
+    criterion = nn.CrossEntropyLoss()
+
+    train_loader, val_loader = get_train_val_loaders(dataset, batch_size=config["batch_size"])
+    train(net, optimizer, criterion, train_loader, val_loader)
+    # train_cifar(config, dataset)
 
 
 def main(num_samples=10, max_num_epochs=10, gpus_per_trial=0):
@@ -238,5 +248,5 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=0):
 
 if __name__ == "__main__":
 
-    # dummy_config_test()
-    main(num_samples=100, max_num_epochs=100)
+    run_single_config()
+    # main(num_samples=5000, max_num_epochs=100)
