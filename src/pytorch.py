@@ -285,7 +285,7 @@ def run_single_config():
     criterion = nn.CrossEntropyLoss()
 
     train_loader, val_loader = get_train_val_loaders(dataset, batch_size=config["batch_size"])
-    train(net, optimizer, criterion, train_loader, val_loader)
+    train(net, optimizer, criterion, train_loader, val_loader, max_num_epochs=100)
     # train_cifar(config, dataset)
 
 

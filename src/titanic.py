@@ -4,22 +4,8 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, FunctionTransformer, StandardScaler
-from src.kaggle_api import get_dataset
 from src.gen import train_test_from_null, get_xy_from_dataframe
 from src.settings import DATA_PATH
-
-
-def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Load the raw train and test datasets for a given dataset.
-    :return: train_dataset, test_dataset
-    """
-    # TODO: Abstract this, have a string input for dataset name, optional kwargs for train/test names.
-    path = get_dataset("titanic")
-    raw_train_data = pd.read_csv(path / "train.csv")
-    raw_test_data = pd.read_csv(path / "test.csv")
-
-    return raw_train_data, raw_test_data
 
 
 def load_clean_data() -> tuple[pd.DataFrame, pd.DataFrame]:
