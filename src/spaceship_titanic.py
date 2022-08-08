@@ -1,4 +1,7 @@
+import numpy as np
 import pandas as pd
+from functools import partial
+from hyperopt import hp, fmin, tpe, space_eval
 from feature_engine.selection import DropFeatures, DropConstantFeatures, DropDuplicateFeatures
 from sklearn.compose import ColumnTransformer, make_column_selector
 from sklearn.ensemble import GradientBoostingClassifier
@@ -6,8 +9,22 @@ from sklearn.feature_selection import SelectPercentile, chi2
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, FunctionTransformer
 from src.gen import get_xy_from_dataframe
+from src.hyper_example import objective
 from src.kaggle_api import load_dataset
 from src.settings import DATA_PATH
+
+DATASET = "spaceship-titanic"
+TARGET = "Transported"
+DATASET_PATH = DATA_PATH / DATASET
+
+
+def get_clean_data() -> tuple[pd.DataFrame, pd.DataFrame]:
+
+    train, test = load_dataset(DATASET)
+    train = imputer(train)
+    test = imputer(test)
+
+    return train, test
 
 
 def imputer(df: pd.DataFrame) -> pd.DataFrame:
@@ -67,29 +84,11 @@ def get_features(df):
     return df
 
 
-if __name__ == "__main__":
-
-    dataset = "spaceship-titanic"
-    dataset_path = DATA_PATH / dataset
-    train, test = load_dataset(dataset)
-    target = "Transported"
-
-    train.info()
-    print(train)
-    for c in train.columns:
-        print(train[c].value_counts())
-
-    train = imputer(train)
-    test = imputer(test)
-    train.info()
-    test.info()
-
-    X_train, y_train = get_xy_from_dataframe(train, target)
-
+def get_pipeline():
     # Feature engineering
     preprocessor = FunctionTransformer(get_features)
-    xx = preprocessor.fit_transform(X_train, y_train)
 
+    # Encoding + column transforms
     encoder = ColumnTransformer(
         transformers=[
             ("onehot", OneHotEncoder(), make_column_selector(dtype_include=object)),
@@ -104,11 +103,57 @@ if __name__ == "__main__":
         ('drop_duplicates', DropDuplicateFeatures()),
         ("encoder", encoder),
         ("selector", SelectPercentile(chi2, percentile=50)),
-        ("clf", GradientBoostingClassifier())
+        ("classifier", GradientBoostingClassifier())
     ])
+
+    return pipe
+
+
+def main():
+
+    train, test = get_clean_data()
+    train.info()
+    test.info()
+
+    X_train, y_train = get_xy_from_dataframe(train, TARGET)
+
+    pipe = get_pipeline()
 
     pipe.fit(X_train, y_train)
     print(pipe.steps[-1][1].feature_importances_)
-    test[target] = pipe.predict(test)
+    test[TARGET] = pipe.predict(test)
 
-    test.to_csv(dataset_path / "pipeline_prediction.csv", columns=["PassengerId", target], index=False)
+    test.to_csv(DATASET_PATH / "pipeline_prediction.csv", columns=["PassengerId", TARGET], index=False)
+
+
+def tune():
+
+    pipe = get_pipeline()
+
+    train_data, test_data = get_clean_data()
+    x_train, y_train = get_xy_from_dataframe(train_data, TARGET)
+
+    obj_func = partial(objective, estimator=pipe, x=x_train, y=y_train, cv=10)
+
+    pipe_space = {
+        "selector__percentile": hp.choice('percentile', list(range(10, 100, 10))),
+        "classifier__learning_rate": hp.loguniform('learning_rate', np.log(0.001), np.log(0.2)),
+        "classifier__min_samples_split": hp.uniform('min_samples_split', 0.1, 0.5),
+        "classifier__min_samples_leaf": hp.uniform('min_samples_leaf', 0.1, 0.5),
+        "classifier__max_depth": hp.randint('max_depth', 1, 8),
+        "classifier__subsample": hp.uniform('subsample', 0.6, 1.0),
+    }
+
+    best = fmin(obj_func, pipe_space, algo=tpe.suggest, max_evals=100)
+
+    best_params = space_eval(pipe_space, best)
+    pipe.set_params(**best_params)
+    pipe.fit(x_train, y_train)
+    test_data[TARGET] = pipe.predict(test_data)
+
+    test_data.to_csv(DATASET_PATH / "tuned_pipeline_prediction.csv", columns=["PassengerId", TARGET], index=False)
+
+
+if __name__ == "__main__":
+
+    tune()
