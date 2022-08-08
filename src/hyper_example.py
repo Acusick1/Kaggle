@@ -1,18 +1,18 @@
 import numpy as np
 from functools import partial
-from hyperopt import hp, fmin, tpe
+from hyperopt import hp, fmin, tpe, STATUS_OK
 from sklearn.model_selection import cross_validate
 from src.gen import get_xy_from_dataframe
 from src.titanic import load_clean_data, clean_pipeline_example
 
 
-def objective(params, estimator=None, x=None, y=None):
+def objective(params, estimator=None, x=None, y=None, **kwargs):
 
     estimator.set_params(**params)
-    out = cross_validate(estimator, x, y)
-    loss = 1 - out["test_score"].mean()
+    out = cross_validate(estimator, x, y, **kwargs)
+    loss = -out["test_score"].mean()
 
-    return loss
+    return {"loss": loss, "status": STATUS_OK}
 
 
 def main():
