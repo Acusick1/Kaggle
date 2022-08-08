@@ -2,10 +2,12 @@ import pandas as pd
 from feature_engine.selection import DropFeatures, DropConstantFeatures, DropDuplicateFeatures
 from sklearn.compose import ColumnTransformer, make_column_selector
 from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.feature_selection import SelectPercentile, chi2
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, FunctionTransformer
 from src.gen import get_xy_from_dataframe
 from src.kaggle_api import load_dataset
+from src.settings import DATA_PATH
 
 
 def imputer(df: pd.DataFrame) -> pd.DataFrame:
@@ -67,7 +69,9 @@ def get_features(df):
 
 if __name__ == "__main__":
 
-    train, test = load_dataset("spaceship-titanic")
+    dataset = "spaceship-titanic"
+    dataset_path = DATA_PATH / dataset
+    train, test = load_dataset(dataset)
     target = "Transported"
 
     train.info()
@@ -99,9 +103,12 @@ if __name__ == "__main__":
         ('drop_constant_values', DropConstantFeatures(tol=1, missing_values='ignore')),
         ('drop_duplicates', DropDuplicateFeatures()),
         ("encoder", encoder),
+        ("selector", SelectPercentile(chi2, percentile=50)),
         ("clf", GradientBoostingClassifier())
     ])
 
     pipe.fit(X_train, y_train)
     print(pipe.steps[-1][1].feature_importances_)
-    pipe.predict(test)
+    test[target] = pipe.predict(test)
+
+    test.to_csv(dataset_path / "pipeline_prediction.csv", columns=["PassengerId", target], index=False)
