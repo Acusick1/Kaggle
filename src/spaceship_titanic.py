@@ -8,6 +8,8 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.feature_selection import SelectPercentile, chi2
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, FunctionTransformer
+from sklearn.experimental import enable_iterative_imputer  # noqa
+from sklearn.impute import IterativeImputer
 from src.gen import get_xy_from_dataframe
 from src.hyper_example import objective
 from src.kaggle_api import load_dataset
@@ -37,12 +39,13 @@ def imputer(df: pd.DataFrame) -> pd.DataFrame:
     # train["Destination"] = train["Destination"].fillna(method="Mode")
 
     # TODO: Cabin 0 exists, try using NaN if encoder function allows missing, otherwise max + 1?
+    # TODO: Sum spend first, use within IterativeImputer?
     column_fills = {
         "HomePlanet": "unknown",
-        "CryoSleep": df["CryoSleep"].mode()[0],
+        # "CryoSleep": df["CryoSleep"].mode()[0],
         "Destination": df["Destination"].mode()[0],
-        "Age": df["Age"].median(),
-        "VIP": df["VIP"].mode()[0],
+        # "Age": df["Age"].median(),
+        # "VIP": df["VIP"].mode()[0],
         "Name": "unknown unknown",
         "Cabin": "unknown/0/unknown",
         "RoomService": 0,
@@ -92,6 +95,7 @@ def get_pipeline():
     encoder = ColumnTransformer(
         transformers=[
             ("onehot", OneHotEncoder(), make_column_selector(dtype_include=object)),
+            ("imputer", IterativeImputer(), make_column_selector(dtype_exclude=object))
         ],
         remainder="passthrough"
     )
@@ -115,11 +119,14 @@ def main():
     train.info()
     test.info()
 
-    X_train, y_train = get_xy_from_dataframe(train, TARGET)
+    x_train, y_train = get_xy_from_dataframe(train, TARGET)
 
     pipe = get_pipeline()
 
-    pipe.fit(X_train, y_train)
+    # Testing pipeline steps (not including classifier)
+    # x_train_trans = Pipeline(steps=pipe.steps[:-1]).fit_transform(X_train, y_train)
+
+    pipe.fit(x_train, y_train)
     print(pipe.steps[-1][1].feature_importances_)
     test[TARGET] = pipe.predict(test)
 
