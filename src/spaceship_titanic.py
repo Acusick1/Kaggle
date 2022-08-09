@@ -6,6 +6,7 @@ from feature_engine.selection import DropFeatures, DropConstantFeatures, DropDup
 from sklearn.compose import ColumnTransformer, make_column_selector
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.feature_selection import SelectPercentile, chi2
+from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, FunctionTransformer
 from sklearn.experimental import enable_iterative_imputer  # noqa
@@ -13,7 +14,7 @@ from sklearn.impute import IterativeImputer
 from src.gen import get_xy_from_dataframe
 from src.hyper_example import objective
 from src.kaggle_api import load_dataset
-from src.settings import DATA_PATH
+from src.settings import DATA_PATH, RNG_STATE
 
 DATASET = "spaceship-titanic"
 TARGET = "Transported"
@@ -88,14 +89,16 @@ def get_features(df):
 
 
 def get_pipeline():
+
     # Feature engineering
     preprocessor = FunctionTransformer(get_features)
+    imp = IterativeImputer(min_value=0, random_state=RNG_STATE)
 
     # Encoding + column transforms
     encoder = ColumnTransformer(
         transformers=[
             ("onehot", OneHotEncoder(), make_column_selector(dtype_include=object)),
-            ("imputer", IterativeImputer(), make_column_selector(dtype_exclude=object))
+            ("imputer", imp, make_column_selector(dtype_exclude=object))
         ],
         remainder="passthrough"
     )
@@ -140,7 +143,8 @@ def tune():
     train_data, test_data = get_clean_data()
     x_train, y_train = get_xy_from_dataframe(train_data, TARGET)
 
-    obj_func = partial(objective, estimator=pipe, x=x_train, y=y_train, cv=10)
+    cv = KFold(n_splits=10, shuffle=True, random_state=RNG_STATE)
+    obj_func = partial(objective, estimator=pipe, x=x_train, y=y_train, cv=cv)
 
     pipe_space = {
         "selector__percentile": hp.choice('percentile', list(range(10, 100, 10))),
