@@ -103,15 +103,30 @@ def get_pipeline():
         remainder="passthrough"
     )
 
-    pipe = Pipeline(steps=[
-        ("get_features", preprocessor),
-        ('drop_columns', DropFeatures(["Name"])),
-        ('drop_constant_values', DropConstantFeatures(tol=1, missing_values='ignore')),
-        ('drop_duplicates', DropDuplicateFeatures()),
-        ("encoder", encoder),
-        ("selector", SelectPercentile(chi2, percentile=50)),
-        ("classifier", GradientBoostingClassifier())
-    ])
+    preprocess_pipe = Pipeline(
+        steps=[
+            ("get_features", preprocessor),
+            ('drop_columns', DropFeatures(["Name"])),
+            ('drop_constant_values', DropConstantFeatures(tol=1, missing_values='ignore')),
+            ('drop_duplicates', DropDuplicateFeatures()),
+            ("encoder", encoder)
+        ],
+        memory=str(DATASET_PATH / "tmp" / "cache")
+    )
+
+    config_pipe = Pipeline(
+        steps=[
+            ("selector", SelectPercentile(chi2, percentile=50)),
+            ("classifier", GradientBoostingClassifier())
+        ]
+    )
+
+    pipe = Pipeline(
+        steps=[
+            ("preprocessing", preprocess_pipe),
+            ("configurable", config_pipe)
+        ]
+    )
 
     return pipe
 
@@ -143,16 +158,19 @@ def tune():
     train_data, test_data = get_clean_data()
     x_train, y_train = get_xy_from_dataframe(train_data, TARGET)
 
+    # Fit pipeline first (without classifier) to save any cache components
+    Pipeline(steps=pipe.steps[:-1]).fit(x_train, y_train)
+
     cv = KFold(n_splits=10, shuffle=True, random_state=RNG_STATE)
     obj_func = partial(objective, estimator=pipe, x=x_train, y=y_train, cv=cv)
 
     pipe_space = {
-        "selector__percentile": hp.choice('percentile', list(range(10, 100, 10))),
-        "classifier__learning_rate": hp.loguniform('learning_rate', np.log(0.001), np.log(0.2)),
-        "classifier__min_samples_split": hp.uniform('min_samples_split', 0.1, 0.5),
-        "classifier__min_samples_leaf": hp.uniform('min_samples_leaf', 0.1, 0.5),
-        "classifier__max_depth": hp.randint('max_depth', 1, 8),
-        "classifier__subsample": hp.uniform('subsample', 0.6, 1.0),
+        "configurable__selector__percentile": hp.choice('percentile', list(range(10, 100, 10))),
+        "configurable__classifier__learning_rate": hp.loguniform('learning_rate', np.log(0.001), np.log(0.2)),
+        "configurable__classifier__min_samples_split": hp.uniform('min_samples_split', 0.1, 0.5),
+        "configurable__classifier__min_samples_leaf": hp.uniform('min_samples_leaf', 0.1, 0.5),
+        "configurable__classifier__max_depth": hp.randint('max_depth', 1, 8),
+        "configurable__classifier__subsample": hp.uniform('subsample', 0.6, 1.0),
     }
 
     best = fmin(obj_func, pipe_space, algo=tpe.suggest, max_evals=100)
