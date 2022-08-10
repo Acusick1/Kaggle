@@ -1,3 +1,4 @@
+import mlflow
 import numpy as np
 from functools import partial
 from hyperopt import hp, fmin, tpe, STATUS_OK
@@ -8,9 +9,22 @@ from src.titanic import load_clean_data, clean_pipeline_example
 
 def objective(params, estimator=None, x=None, y=None, **kwargs):
 
-    estimator.set_params(**params)
-    out = cross_validate(estimator, x, y, **kwargs)
-    loss = -out["test_score"].mean()
+    with mlflow.start_run():
+        estimator.set_params(**params)
+
+        for k, v in params.items():
+            mlflow.log_param(k.split("__")[-1], v)
+
+        out = cross_validate(estimator, x, y, **kwargs)
+
+        loss = 0
+        for k, v in out.items():
+            if "test_" in k:
+                # Taking worst case
+                score = out[k].min()
+                mlflow.log_metric(k, score)
+                # TODO: Temporary, one metric may always be less than another etc.
+                loss = min(loss, -score)
 
     return {"loss": loss, "status": STATUS_OK}
 

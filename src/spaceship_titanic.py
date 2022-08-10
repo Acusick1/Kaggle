@@ -42,13 +42,13 @@ def imputer(df: pd.DataFrame) -> pd.DataFrame:
     # TODO: Cabin 0 exists, try using NaN if encoder function allows missing, otherwise max + 1?
     # TODO: Sum spend first, use within IterativeImputer?
     column_fills = {
-        "HomePlanet": "unknown",
+        # "HomePlanet": "unknown",
         # "CryoSleep": df["CryoSleep"].mode()[0],
-        "Destination": df["Destination"].mode()[0],
+        # "Destination": df["Destination"].mode()[0],
         # "Age": df["Age"].median(),
         # "VIP": df["VIP"].mode()[0],
-        "Name": "unknown unknown",
-        "Cabin": "unknown/0/unknown",
+        # "Name": "unknown unknown",
+        # "Cabin": "unknown/0/unknown",
         "RoomService": 0,
         "FoodCourt": 0,
         "ShoppingMall": 0,
@@ -162,14 +162,15 @@ def tune():
     Pipeline(steps=pipe.steps[:-1]).fit(x_train, y_train)
 
     cv = KFold(n_splits=10, shuffle=True, random_state=RNG_STATE)
-    obj_func = partial(objective, estimator=pipe, x=x_train, y=y_train, cv=cv)
+    obj_func = partial(objective, estimator=pipe, x=x_train, y=y_train, cv=cv, scoring=("accuracy", "f1"))
 
     pipe_space = {
         "configurable__selector__percentile": hp.choice('percentile', list(range(10, 100, 10))),
+        "configurable__classifier__n_estimators": hp.choice('n', [100, 200, 500]),
         "configurable__classifier__learning_rate": hp.loguniform('learning_rate', np.log(0.001), np.log(0.2)),
-        "configurable__classifier__min_samples_split": hp.uniform('min_samples_split', 0.1, 0.5),
-        "configurable__classifier__min_samples_leaf": hp.uniform('min_samples_leaf', 0.1, 0.5),
-        "configurable__classifier__max_depth": hp.randint('max_depth', 1, 8),
+        "configurable__classifier__min_samples_split": hp.uniform('min_samples_split', 0.01, 0.1),
+        "configurable__classifier__min_samples_leaf": hp.uniform('min_samples_leaf', 0.01, 0.1),
+        "configurable__classifier__max_depth": hp.randint('max_depth', 3, 8),
         "configurable__classifier__subsample": hp.uniform('subsample', 0.6, 1.0),
     }
 
