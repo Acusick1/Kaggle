@@ -3,22 +3,25 @@ import pandas as pd
 from functools import partial
 from hyperopt import hp, fmin, tpe, space_eval
 from feature_engine.selection import DropFeatures, DropConstantFeatures, DropDuplicateFeatures
+from mlflow import set_tracking_uri
 from sklearn.compose import ColumnTransformer, make_column_selector
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.feature_selection import SelectPercentile, chi2
 from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, FunctionTransformer
-from sklearn.experimental import enable_iterative_imputer  # noqa
-from sklearn.impute import IterativeImputer
 from src.gen import get_xy_from_dataframe
 from src.hyper_example import objective
 from src.kaggle_api import load_dataset
 from src.settings import DATA_PATH, RNG_STATE
 
+from sklearn.experimental import enable_iterative_imputer  # noqa
+from sklearn.impute import IterativeImputer
+
 DATASET = "spaceship-titanic"
 TARGET = "Transported"
 DATASET_PATH = DATA_PATH / DATASET
+set_tracking_uri(f"file://{str(DATASET_PATH)}/mlruns")
 
 
 def get_clean_data() -> tuple[pd.DataFrame, pd.DataFrame]:
