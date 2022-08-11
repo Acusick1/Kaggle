@@ -1,8 +1,7 @@
-import numpy as np
 from functools import partial
-from hyperopt import hp, fmin, tpe, STATUS_OK
-from src.gen import get_xy_from_dataframe
-from src.titanic import load_clean_data, clean_pipeline_example
+from hyperopt import fmin, tpe, STATUS_OK
+from sklearn.pipeline import Pipeline
+from typing import Any
 
 
 def objective(params, estimator, x, y, eval_func=None, **kwargs):
@@ -18,29 +17,12 @@ def objective(params, estimator, x, y, eval_func=None, **kwargs):
     return {"loss": -score, "status": STATUS_OK}
 
 
-def main():
+def tune_pipe(x, y, pipe: Pipeline, param_space: dict[str, Any], eval_func=None):
 
-    pipe = clean_pipeline_example()
+    # Fit pipeline first (without classifier) to save any cache components
+    # TODO: Does this actually cache for the input pipe since we are creating a new pipeline?
+    Pipeline(steps=pipe.steps[:-1]).fit(x, y)
+    obj_func = partial(objective, estimator=pipe, eval_func=eval_func, x=x, y=y)
 
-    target = "Survived"
+    return fmin(obj_func, param_space, algo=tpe.suggest, max_evals=3)
 
-    train_data, test_data = load_clean_data()
-    _, y_train = get_xy_from_dataframe(train_data, target)
-
-    obj_func = partial(objective, estimator=pipe, x=train_data, y=y_train)
-
-    pipe_space = {
-        "classifier__learning_rate": hp.loguniform('learning_rate', np.log(0.005), np.log(0.2)),
-        "classifier__min_samples_split": hp.uniform('min_samples_split', 0.1, 0.5),
-        "classifier__min_samples_leaf": hp.uniform('min_samples_leaf', 0.1, 0.5),
-        "classifier__max_depth": hp.choice('max_depth', [5, 8]),
-        "classifier__subsample": hp.uniform('subsample', 0.1, 0.5),
-    }
-
-    for i in range(10):
-        fmin(obj_func, pipe_space, algo=tpe.suggest, max_evals=100)
-
-
-if __name__ == "__main__":
-
-    main()

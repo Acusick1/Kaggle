@@ -1,4 +1,6 @@
+import numpy as np
 import pandas as pd
+from hyperopt import hp
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.impute import SimpleImputer
@@ -49,10 +51,6 @@ def get_title(df: pd.DataFrame) -> pd.DataFrame:
     out = pd.get_dummies(df["Title"], drop_first=True)
 
     return out
-
-
-def clean_dataset_pandas(df):
-    pass
 
 
 def prepare_dataset_pandas(dfs: list[pd.DataFrame], scale=True, drop=None, target=None) -> list[pd.DataFrame]:
@@ -131,7 +129,15 @@ def clean_pipeline_example():
         ("classifier", GradientBoostingClassifier(loss="log_loss", criterion="friedman_mse", n_estimators=50))]
     )
 
-    return pipe
+    pipe_space = {
+        "classifier__learning_rate": hp.loguniform('learning_rate', np.log(0.005), np.log(0.2)),
+        "classifier__min_samples_split": hp.uniform('min_samples_split', 0.1, 0.5),
+        "classifier__min_samples_leaf": hp.uniform('min_samples_leaf', 0.1, 0.5),
+        "classifier__max_depth": hp.choice('max_depth', [5, 8]),
+        "classifier__subsample": hp.uniform('subsample', 0.1, 0.5),
+    }
+
+    return pipe, pipe_space
 
 
 def run_clean_pipeline_example():
@@ -141,7 +147,7 @@ def run_clean_pipeline_example():
     train_data, test_data = load_clean_data()
     _, y_train = get_xy_from_dataframe(train_data, target)
 
-    p = clean_pipeline_example()
+    p, _ = clean_pipeline_example()
 
     p.fit(train_data, y_train)
     test_data[target] = p.predict(test_data)

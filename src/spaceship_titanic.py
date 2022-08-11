@@ -2,7 +2,7 @@ import mlflow
 import numpy as np
 import pandas as pd
 from functools import partial
-from hyperopt import hp, fmin, tpe, space_eval
+from hyperopt import hp, space_eval
 from feature_engine.selection import DropFeatures, DropConstantFeatures, DropDuplicateFeatures
 from sklearn.compose import ColumnTransformer, make_column_selector
 from sklearn.ensemble import GradientBoostingClassifier
@@ -11,8 +11,8 @@ from sklearn.model_selection import KFold, cross_validate
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, FunctionTransformer
 from typing import Any
+from src import hyper_tuning
 from src.gen import get_xy_from_dataframe
-from src.hyper_tuning import objective
 from src.kaggle_api import load_dataset
 from src.settings import DATA_PATH, RNG_STATE
 
@@ -163,9 +163,6 @@ def tune():
     train_data, test_data = get_clean_data()
     x_train, y_train = get_xy_from_dataframe(train_data, TARGET)
 
-    # Fit pipeline first (without classifier) to save any cache components
-    Pipeline(steps=pipe.steps[:-1]).fit(x_train, y_train)
-
     cv = KFold(n_splits=10, shuffle=True, random_state=RNG_STATE)
 
     eval_func = partial(
@@ -173,14 +170,6 @@ def tune():
         score_func=scorer,
         cv=cv,
         scoring=("accuracy", "f1")
-    )
-
-    obj_func = partial(
-        objective,
-        estimator=pipe,
-        eval_func=eval_func,
-        x=x_train,
-        y=y_train,
     )
 
     pipe_space = {
@@ -193,13 +182,13 @@ def tune():
         "configurable__classifier__subsample": hp.uniform('subsample', 0.6, 1.0),
     }
 
-    best = fmin(obj_func, pipe_space, algo=tpe.suggest, max_evals=100)
+    best = hyper_tuning.tune_pipe(x_train, y_train, pipe, pipe_space, eval_func=eval_func)
 
     best_params = space_eval(pipe_space, best)
     pipe.set_params(**best_params)
     pipe.fit(x_train, y_train)
-    test_data[TARGET] = pipe.predict(test_data)
 
+    test_data[TARGET] = pipe.predict(test_data)
     test_data.to_csv(DATASET_PATH / "tuned_pipeline_prediction.csv", columns=["PassengerId", TARGET], index=False)
 
 
