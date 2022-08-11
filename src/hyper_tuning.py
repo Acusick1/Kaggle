@@ -7,7 +7,7 @@ from src.gen import get_xy_from_dataframe
 from src.titanic import load_clean_data, clean_pipeline_example
 
 
-def objective(params, estimator=None, x=None, y=None, **kwargs):
+def objective(params, estimator=None, x=None, y=None, score_func=None, **kwargs):
 
     with mlflow.start_run():
         estimator.set_params(**params)
@@ -17,16 +17,17 @@ def objective(params, estimator=None, x=None, y=None, **kwargs):
 
         out = cross_validate(estimator, x, y, **kwargs)
 
-        loss = 0
-        for k, v in out.items():
-            if "test_" in k:
-                # Taking worst case
-                score = out[k].min()
-                mlflow.log_metric(k, score)
-                # TODO: Temporary, one metric may always be less than another etc.
-                loss = min(loss, -score)
+        if score_func is None:
+            score = out.get("test_score")
 
-    return {"loss": loss, "status": STATUS_OK}
+            if score is None:
+                raise KeyError("test_score not found in estimator output, if using a custom or multi-scorer, a "
+                               "score_func must be provided")
+
+        else:
+            score = score_func(out)
+
+    return {"loss": -score, "status": STATUS_OK}
 
 
 def main():

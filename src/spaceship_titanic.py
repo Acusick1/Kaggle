@@ -1,17 +1,18 @@
+import mlflow
 import numpy as np
 import pandas as pd
 from functools import partial
 from hyperopt import hp, fmin, tpe, space_eval
 from feature_engine.selection import DropFeatures, DropConstantFeatures, DropDuplicateFeatures
-from mlflow import set_tracking_uri
 from sklearn.compose import ColumnTransformer, make_column_selector
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.feature_selection import SelectPercentile, chi2
 from sklearn.model_selection import KFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, FunctionTransformer
+from typing import Any
 from src.gen import get_xy_from_dataframe
-from src.hyper_example import objective
+from src.hyper_tuning import objective
 from src.kaggle_api import load_dataset
 from src.settings import DATA_PATH, RNG_STATE
 
@@ -21,7 +22,8 @@ from sklearn.impute import IterativeImputer
 DATASET = "spaceship-titanic"
 TARGET = "Transported"
 DATASET_PATH = DATA_PATH / DATASET
-set_tracking_uri(f"file://{str(DATASET_PATH)}/mlruns")
+# TODO: Have incoming variable that sets new experiment if not None
+# exp_id = mlflow.create_experiment(NAME)
 
 
 def get_clean_data() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -165,7 +167,16 @@ def tune():
     Pipeline(steps=pipe.steps[:-1]).fit(x_train, y_train)
 
     cv = KFold(n_splits=10, shuffle=True, random_state=RNG_STATE)
-    obj_func = partial(objective, estimator=pipe, x=x_train, y=y_train, cv=cv, scoring=("accuracy", "f1"))
+
+    obj_func = partial(
+        objective,
+        estimator=pipe,
+        x=x_train,
+        y=y_train,
+        score_func=scorer,
+        cv=cv,
+        scoring=("accuracy", "f1")
+    )
 
     pipe_space = {
         "configurable__selector__percentile": hp.choice('percentile', list(range(10, 100, 10))),
@@ -185,6 +196,20 @@ def tune():
     test_data[TARGET] = pipe.predict(test_data)
 
     test_data.to_csv(DATASET_PATH / "tuned_pipeline_prediction.csv", columns=["PassengerId", TARGET], index=False)
+
+
+def scorer(out: dict[str, Any]):
+
+    overall_score = np.inf
+    for metric, values in out.items():
+        if "test_" in metric:
+            # Taking worst case
+            score = values.min()
+            mlflow.log_metric(metric, score)
+            # TODO: Temporary, one metric may always be less than another etc.
+            overall_score = min(overall_score, score)
+
+    return overall_score
 
 
 if __name__ == "__main__":
