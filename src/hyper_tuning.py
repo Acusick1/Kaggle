@@ -1,31 +1,19 @@
-import mlflow
 import numpy as np
 from functools import partial
 from hyperopt import hp, fmin, tpe, STATUS_OK
-from sklearn.model_selection import cross_validate
 from src.gen import get_xy_from_dataframe
 from src.titanic import load_clean_data, clean_pipeline_example
 
 
-def objective(params, estimator=None, x=None, y=None, score_func=None, **kwargs):
+def objective(params, estimator, x, y, eval_func=None, **kwargs):
 
-    with mlflow.start_run():
-        estimator.set_params(**params)
+    estimator.set_params(**params)
 
-        for k, v in params.items():
-            mlflow.log_param(k.split("__")[-1], v)
+    if eval_func is not None:
+        score = eval_func(estimator, x, y, params=params, fit_params=kwargs)
 
-        out = cross_validate(estimator, x, y, **kwargs)
-
-        if score_func is None:
-            score = out.get("test_score")
-
-            if score is None:
-                raise KeyError("test_score not found in estimator output, if using a custom or multi-scorer, a "
-                               "score_func must be provided")
-
-        else:
-            score = score_func(out)
+    else:
+        score = estimator.fit(x, y, **kwargs)
 
     return {"loss": -score, "status": STATUS_OK}
 

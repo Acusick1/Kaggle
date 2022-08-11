@@ -4,9 +4,10 @@ from matplotlib import cm
 from sklearn.utils import all_estimators
 from sklearn.datasets import make_classification, make_regression
 from sklearn.model_selection import KFold, LeaveOneOut, cross_val_score
+from src.settings import RNG_STATE
 
 ESTIMATOR_TYPES = ("classifier", "regressor", "cluster", "transformer")
-DEFAULT_KFOLD = KFold(n_splits=10, shuffle=True, random_state=1)
+DEFAULT_KFOLD = KFold(n_splits=10, shuffle=True, random_state=RNG_STATE)
 
 
 # create the dataset

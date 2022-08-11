@@ -7,7 +7,7 @@ from feature_engine.selection import DropFeatures, DropConstantFeatures, DropDup
 from sklearn.compose import ColumnTransformer, make_column_selector
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.feature_selection import SelectPercentile, chi2
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, cross_validate
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, FunctionTransformer
 from typing import Any
@@ -168,14 +168,19 @@ def tune():
 
     cv = KFold(n_splits=10, shuffle=True, random_state=RNG_STATE)
 
-    obj_func = partial(
-        objective,
-        estimator=pipe,
-        x=x_train,
-        y=y_train,
+    eval_func = partial(
+        cv_mlflow_score,
         score_func=scorer,
         cv=cv,
         scoring=("accuracy", "f1")
+    )
+
+    obj_func = partial(
+        objective,
+        estimator=pipe,
+        eval_func=eval_func,
+        x=x_train,
+        y=y_train,
     )
 
     pipe_space = {
@@ -196,6 +201,31 @@ def tune():
     test_data[TARGET] = pipe.predict(test_data)
 
     test_data.to_csv(DATASET_PATH / "tuned_pipeline_prediction.csv", columns=["PassengerId", TARGET], index=False)
+
+
+def cv_mlflow_score(estimator, x, y, params=None, score_func=None, **kwargs):
+
+    with mlflow.start_run():
+
+        if params is None:
+            params = estimator.get_params()
+
+        for k, v in params.items():
+            mlflow.log_param(k.split("__")[-1], v)
+
+        out = cross_validate(estimator, x, y, **kwargs)
+
+        if score_func is None:
+            score = out.get("test_score")
+
+            if score is None:
+                raise KeyError("test_score not found in estimator output, if using a custom or multi-scorer, a "
+                               "score_func must be provided")
+
+        else:
+            score = score_func(out)
+
+    return score
 
 
 def scorer(out: dict[str, Any]):
