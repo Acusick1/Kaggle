@@ -1,4 +1,5 @@
 import pandas as pd
+from sklearn.pipeline import Pipeline
 
 
 def train_test_from_null(df: pd.DataFrame, target: str) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -11,7 +12,14 @@ def train_test_from_null(df: pd.DataFrame, target: str) -> tuple[pd.DataFrame, p
 
 def get_xy_from_dataframe(df, target):
 
-    X = df[[c for c in df.columns if c != target]]
+    x = df[[c for c in df.columns if c != target]]
     y = df[target] if target in df else None
 
-    return X, y
+    return x, y
+
+
+def debug_pipeline(pipe: Pipeline, x, y=None):
+
+    for step in pipe.steps:
+        temp = Pipeline(steps=[step])
+        x = temp.fit_transform(x, y)
