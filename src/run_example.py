@@ -4,7 +4,7 @@ from linear_regression import run_linear_reg
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description='Run various PyTorch examples with CPU or GPU')
+    parser = argparse.ArgumentParser(description='Run various Kaggle examples with CPU or GPU')
 
     parser.add_argument('example', nargs='?', default="linear")
     parser.add_argument('--disable-cuda', action='store_true',
