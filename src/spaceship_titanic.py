@@ -1,18 +1,12 @@
-import mlflow
-import numpy as np
 import pandas as pd
-from functools import partial
-from hyperopt import space_eval
 from feature_engine.selection import DropFeatures
-from sklearn.model_selection import KFold, cross_validate
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer
-from typing import Any
-from src import hyper_tuning
 from src.generic_pipe import get_constant_pipe, get_configurable_pipe
+from src.generic_prediction import run_generic
 from src.gen import get_xy_from_dataframe
 from src.kaggle_api import load_dataset
-from src.settings import DATA_PATH, RNG_STATE
+from src.settings import DATA_PATH
 
 DATASET = "spaceship-titanic"
 TARGET = "Transported"
@@ -114,68 +108,6 @@ def preprocess():
     return x_train, y_train, x_test
 
 
-def cv_mlflow_score(estimator, x, y, params=None, score_func=None, **kwargs):
-
-    with mlflow.start_run():
-
-        if params is None:
-            params = estimator.get_params()
-
-        for k, v in params.items():
-            mlflow.log_param(k.split("__")[-1], v)
-
-        out = cross_validate(estimator, x, y, **kwargs)
-
-        if score_func is None:
-            score = out.get("test_score")
-
-            if score is None:
-                raise KeyError("test_score not found in estimator output, if using a custom or multi-scorer, a "
-                               "score_func must be provided")
-
-        else:
-            score = score_func(out)
-
-    return score
-
-
-def scorer(out: dict[str, Any]):
-
-    overall_score = np.inf
-    for metric, values in out.items():
-        if "test_" in metric:
-            # Taking worst case
-            score = values.min()
-            mlflow.log_metric(metric, score)
-            # TODO: Temporary, one metric may always be less than another etc.
-            overall_score = min(overall_score, score)
-
-    return overall_score
-
-
-def tune():
-    x_train, y_train, x_test = preprocess()
-
-    pipe, pipe_space = get_configurable_pipe()
-    cv = KFold(n_splits=10, shuffle=True, random_state=RNG_STATE)
-
-    eval_func = partial(
-        cv_mlflow_score,
-        score_func=scorer,
-        cv=cv,
-        scoring=("accuracy", "f1")
-    )
-
-    best = hyper_tuning.tune_pipe(x_train, y_train, pipe, pipe_space, eval_func=eval_func)
-
-    best_params = space_eval(pipe_space, best)
-    pipe.set_params(**best_params)
-    pipe.fit(x_train, y_train)
-
-    TEST[TARGET] = pipe.predict(x_test)
-    TEST.to_csv(DATASET_PATH / "tuned_pipeline_prediction.csv", columns=["PassengerId", TARGET], index=False)
-
-
 def main():
     x_train, y_train, x_test = preprocess()
 
@@ -190,4 +122,18 @@ def main():
 
 if __name__ == "__main__":
 
-    main()
+    dataset_preprocess_pipe = Pipeline(steps=[
+        ("get_features", FunctionTransformer(get_features)),
+        ('drop_columns', DropFeatures(["Name"]))
+    ])
+
+    const_pipe_params = {"encoder__imputer__min_value": 0}
+
+    run_generic(
+        DATASET,
+        target=TARGET,
+        write_columns=["PassengerId", TARGET],
+        preprocess_pipe=dataset_preprocess_pipe,
+        const_pipe_params=const_pipe_params,
+        tune=True
+    )
