@@ -12,8 +12,6 @@ DATASET = "spaceship-titanic"
 TARGET = "Transported"
 DATASET_PATH = DATA_PATH / DATASET
 TRAIN, TEST = load_dataset(DATASET)
-# TODO: Have incoming variable that sets new experiment if not None
-# exp_id = mlflow.create_experiment(NAME)
 
 
 def imputer(df: pd.DataFrame) -> pd.DataFrame:
@@ -124,7 +122,7 @@ if __name__ == "__main__":
 
     dataset_preprocess_pipe = Pipeline(steps=[
         ("get_features", FunctionTransformer(get_features)),
-        ('drop_columns', DropFeatures(["Name"]))
+        ("drop_columns", DropFeatures(["Name"]))
     ])
 
     const_pipe_params = {"encoder__imputer__min_value": 0}

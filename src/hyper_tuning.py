@@ -24,5 +24,4 @@ def tune_pipe(x, y, pipe: Pipeline, param_space: dict[str, Any], eval_func=None)
     Pipeline(steps=pipe.steps[:-1]).fit(x, y)
     obj_func = partial(objective, estimator=pipe, eval_func=eval_func, x=x, y=y)
 
-    return fmin(obj_func, param_space, algo=tpe.suggest, max_evals=3)
-
+    return fmin(obj_func, param_space, algo=tpe.suggest, max_evals=100)

@@ -10,7 +10,7 @@ from typing import Any
 from src.settings import RNG_STATE
 
 from sklearn.experimental import enable_iterative_imputer  # noqa
-from sklearn.impute import IterativeImputer
+from sklearn import impute
 
 """
 Currently using separate pipelines for constant (preprocessing) and variable (configurable) steps. These could be used
@@ -26,15 +26,15 @@ def get_constant_pipe():
     encoder = ColumnTransformer(
         transformers=[
             ("onehot", OneHotEncoder(), make_column_selector(dtype_include=object)),
-            ("imputer", IterativeImputer(random_state=RNG_STATE), make_column_selector(dtype_exclude=object))
+            ("imputer", impute.IterativeImputer(random_state=RNG_STATE), make_column_selector(dtype_exclude=object))
         ],
         remainder="passthrough"
     )
 
     preprocess_pipe = Pipeline(
         steps=[
-            ('drop_constant_values', DropConstantFeatures(tol=1, missing_values='ignore')),
-            ('drop_duplicates', DropDuplicateFeatures()),
+            ("drop_constant_values", DropConstantFeatures(tol=1, missing_values="ignore")),
+            ("drop_duplicates", DropDuplicateFeatures()),
             ("encoder", encoder)
         ],
     )
@@ -52,13 +52,13 @@ def get_configurable_pipe() -> tuple[Pipeline, dict[str, Any]]:
     )
 
     pipe_space = {
-        "selector__percentile": hp.choice('percentile', list(range(10, 100, 10))),
-        "classifier__n_estimators": hp.choice('n', [100, 200, 500]),
-        "classifier__learning_rate": hp.loguniform('learning_rate', np.log(0.001), np.log(0.2)),
-        "classifier__min_samples_split": hp.uniform('min_samples_split', 0.01, 0.1),
-        "classifier__min_samples_leaf": hp.uniform('min_samples_leaf', 0.01, 0.1),
-        "classifier__max_depth": hp.randint('max_depth', 3, 8),
-        "classifier__subsample": hp.uniform('subsample', 0.6, 1.0),
+        "selector__percentile": hp.choice("percentile", list(range(10, 100, 10))),
+        "classifier__n_estimators": hp.choice("n", [100, 200, 500]),
+        "classifier__learning_rate": hp.loguniform("learning_rate", np.log(0.001), np.log(0.2)),
+        "classifier__min_samples_split": hp.uniform("min_samples_split", 0.01, 0.1),
+        "classifier__min_samples_leaf": hp.uniform("min_samples_leaf", 0.01, 0.1),
+        "classifier__max_depth": hp.randint("max_depth", 3, 8),
+        "classifier__subsample": hp.uniform("subsample", 0.6, 1.0),
     }
 
     return config_pipe, pipe_space
