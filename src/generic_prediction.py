@@ -1,5 +1,6 @@
 import mlflow
 import numpy as np
+from datetime import datetime
 from functools import partial
 from hyperopt import space_eval
 from sklearn.model_selection import KFold, cross_validate
@@ -35,19 +36,25 @@ def run_generic(
     x_train, y_train = get_xy_from_dataframe(train, target)
     x_test, _ = get_xy_from_dataframe(test, target)
 
+    # For debugging
+    # from src.gen import debug_pipeline
+    # debug_pipeline(constant_pipe, x_train, y_train)
+
     x_train = constant_pipe.fit_transform(x_train)
     x_test = constant_pipe.transform(x_test)
 
     out_file = "pipeline_prediction.csv"
 
     if tune:
+        exp_id = mlflow.create_experiment(f"{dataset_name}-{datetime.now()}".replace(" ", "-"))
         cv = KFold(n_splits=10, shuffle=True, random_state=RNG_STATE)
 
         eval_func = partial(
             cv_mlflow_score,
             score_func=scorer,
             cv=cv,
-            scoring=("accuracy", "f1")
+            scoring=("accuracy", "f1"),
+            exp_id=exp_id
         )
 
         best = hyper_tuning.tune_pipe(x_train, y_train, config_pipe, param_space=config_params, eval_func=eval_func)
@@ -55,7 +62,7 @@ def run_generic(
         best_params = space_eval(config_params, best)
         config_pipe.set_params(**best_params)
 
-        out_file = "tuned" + out_file
+        out_file = "_".join(["tuned", out_file])
 
     config_pipe.fit(x_train, y_train)
 
@@ -70,9 +77,9 @@ def run_generic(
     test.to_csv(dataset_path / out_file, columns=write_columns, index=False)
 
 
-def cv_mlflow_score(estimator, x, y, params=None, score_func=None, **kwargs):
+def cv_mlflow_score(estimator, x, y, params=None, score_func=None, exp_id=None, **kwargs):
 
-    with mlflow.start_run():
+    with mlflow.start_run(experiment_id=exp_id):
 
         if params is None:
             params = estimator.get_params()
